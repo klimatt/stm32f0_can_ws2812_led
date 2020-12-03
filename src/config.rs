@@ -1,13 +1,18 @@
 use stm32f0xx_hal::{
-    gpio::gpiob::{PB3, PB0, PB1, PB6, PB7, PB4, PB5},
-    gpio::gpioa::{PA2, PA5, PA0, PA1, PA7, PA8, PA4, PA11, PA12},
-    gpio::gpiof::{PF0, PF1},
-    gpio::{Output, PushPull, Analog, PullUp, Alternate, AF2, AF4, AF1},
+    gpio::gpioa::{PA5, PA6, PA7, PA11, PA12},
+    gpio::gpiob::{PB3, PB4, PB5},
+    gpio::{Alternate, AF4, AF0},
+    spi::Spi,
+    stm32::{SPI1}
 };
-use stm32f0xx_hal::gpio::{Input, PullDown};
 
 pub type CAN_TX_PIN = PA12<Alternate<AF4>>;
 pub type CAN_RX_PIN = PA11<Alternate<AF4>>;
+pub type SCK_PIN = PB3<Alternate<AF0>>;
+pub type MISO_PIN = PB4<Alternate<AF0>>;
+pub type MOSI_PIN = PB5<Alternate<AF0>>;
+
+pub type SPI_TYPE = Spi<SPI1, SCK_PIN, MISO_PIN, MOSI_PIN>;
 
 pub enum UAVCAN_PRIORITY {
     UcpExceptional = 0,

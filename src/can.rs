@@ -1,11 +1,12 @@
 use crate::config::{CAN_TX_PIN, CAN_RX_PIN};
 
 use stm32f0xx_hal::{
-    stm32::{CAN},
+    stm32::{CAN, RCC},
     prelude::*,
 };
 use cortex_m::asm::delay;
 use rtt_target::rprintln;
+use stm32f0xx_hal::time::Hertz;
 
 pub enum CanMode{
     NormalMode = 0,
@@ -56,6 +57,7 @@ pub struct CanParams{
     pub(crate) automatic_retransmission: AutomaticRetransmission,
     pub(crate) automatic_busoff_management : AutomaticBussOffManagement,
     pub(crate) auto_wake_up : AutomaticWakeUpMode,
+    pub(crate) pclk_Hz: Hertz,
     pub(crate) bitrate: BitRate
 }
 
@@ -64,7 +66,8 @@ pub struct Can{
     rx_pin : CAN_RX_PIN,
     can_reg : CAN,
     can_params: CanParams,
-    available_tx_mailbox: [bool; 3]
+    available_tx_mailbox: [bool; 3],
+    pub(crate) receive_flag: bool
 }
 
 impl Can{
@@ -116,6 +119,9 @@ impl Can{
             BitRate::_100Kbs => can_reg.btr.modify(|_,w| unsafe{w.sjw().bits(4).ts1().bits(3).ts2().bits(1).brp().bits(0)}),
         }
 
+        let brp = ((can_params.pclk_Hz.0 / Hertz(8_000_000).0) as u16 - 1) as u16;
+        can_reg.btr.modify(|_,w| unsafe{w.brp().bits(brp)});
+
         can_reg.ier.modify(|_,w|w.errie().disabled());
         can_reg.ier.modify(|_,w|w.bofie().disabled());
         can_reg.ier.modify(|_,w|w.epvie().disabled());
@@ -154,39 +160,10 @@ impl Can{
             rx_pin,
             can_reg,
             can_params,
-            available_tx_mailbox:[true, true, true]
+            available_tx_mailbox:[true, true, true],
+            receive_flag: false
         }
     }
-
-    pub fn reboot(&mut self){
-        let mut cfg_can_timeout = 1_000_000_u32;
-        self.can_reg.mcr.modify(|_,w| w.inrq().set_bit());
-        while self.can_reg.msr.read().inak().bit_is_clear() {
-            cfg_can_timeout = cfg_can_timeout - 1;
-            if cfg_can_timeout == 0 {
-                rprintln!("CAN: inrq enable fail\n");
-                break;
-            }
-        }
-        self.can_reg.mcr.modify(|_, w| w.sleep().clear_bit());
-        cfg_can_timeout = 1_000_000_u32;
-        while self.can_reg.msr.read().slak().bit_is_set() {
-            cfg_can_timeout = cfg_can_timeout - 1;
-            if cfg_can_timeout == 0 {
-                rprintln!("CAN: sleep fail\n");
-                break;
-            }
-        }
-        match self.can_params.work_mode{
-            CanMode::LoopBackMode => self.can_reg.btr.modify(|_,w| w.lbkm().enabled().silm().normal()),
-            CanMode::LoopBackSilentMode => self.can_reg.btr.modify(|_,w| w.lbkm().enabled().silm().silent()),
-            CanMode::SilentMode => self.can_reg.btr.modify(|_,w| w.lbkm().disabled().silm().silent()),
-            CanMode::NormalMode => self.can_reg.btr.modify(|_,w| w.lbkm().disabled().silm().normal())
-        }
-
-        self.can_reg.mcr.modify(|_,w| w.inrq().clear_bit());
-    }
-
 
     pub fn write_to_mailbox(&mut self, id_type: IdType, transmit_id: u32, data: &[u8]){
         for i in 0..self.available_tx_mailbox.len() {
@@ -229,7 +206,7 @@ impl Can{
         let tx_state = self.can_reg.tsr.read();
         let tx_err_state = self.can_reg.esr.read();
         let master_err_state = self.can_reg.msr.read();
-
+        self.receive_flag = false;
 
         if tx_err_state.epvf().bit_is_set() == true{
             rprintln!("CAN: Error passive");
@@ -278,8 +255,10 @@ impl Can{
                 let data = &data_raw as *const _ as * const u8;
                 let data = unsafe{core::slice::from_raw_parts(data, rx_dlc as usize)};
                 self.can_reg.rfr[i].modify(|_, w| w.rfom().release());
+                self.receive_flag = true;
                 f(rx_id, data);
             }
         }
+
     }
 }
