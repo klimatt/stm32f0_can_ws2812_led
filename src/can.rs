@@ -1,4 +1,4 @@
-use crate::config::{CAN_TX_PIN, CAN_RX_PIN};
+use crate::config::{CAN_TX_PIN, CAN_RX_PIN, update_reg_by_bit_pos};
 
 use stm32f0xx_hal::{
     stm32::{CAN, RCC},
@@ -48,8 +48,23 @@ pub enum BitRate{
     _100Kbs = 2
 }
 
-pub struct Error{
+pub enum FilterMode{
+    MaskMode = 0,
+    ListMode = 1
+}
 
+pub enum FilterScaleConfiguration{
+    _32BitSingleConfig = 0,
+    _16BitDualConfig = 1
+}
+
+pub struct Filter{
+    pub(crate) mode: FilterMode,
+    pub(crate) scale_config: FilterScaleConfiguration,
+    pub(crate) id_or_mask: u32,
+    pub(crate) enable: bool,
+    pub(crate) id_type: IdType,
+    pub(crate) rtr: bool
 }
 
 pub struct CanParams{
@@ -61,17 +76,16 @@ pub struct CanParams{
     pub(crate) bitrate: BitRate
 }
 
-pub struct Can{
+pub struct Can {
     tx_pin : CAN_TX_PIN,
     rx_pin : CAN_RX_PIN,
     can_reg : CAN,
-    can_params: CanParams,
     available_tx_mailbox: [bool; 3],
     pub(crate) receive_flag: bool
 }
 
 impl Can{
-    pub fn new(tx_pin: CAN_TX_PIN, rx_pin: CAN_RX_PIN, can_reg: CAN, can_params: CanParams)->Can{
+    pub fn new(tx_pin: CAN_TX_PIN, rx_pin: CAN_RX_PIN, can_reg: CAN, can_params: CanParams, filters: &[Filter])->Can{
         let mut cfg_can_timeout = 1_000_000_u32;
 
         can_reg.mcr.modify(|_,w| w.inrq().set_bit());
@@ -142,15 +156,40 @@ impl Can{
         }
 
         // filters need to fix\\
-        can_reg.fmr.modify(|_,w|w.finit().set_bit());
-        can_reg.fa1r.modify(|_,w|w.fact0().clear_bit());
+        if filters.len() > 0 && filters.len() < 14{
+            can_reg.fmr.modify(|_, w| w.finit().set_bit());
 
-        can_reg.fb[0].fr1.modify(|_,w|unsafe{w.bits(0)});
-        can_reg.fb[0].fr2.modify(|_,w|unsafe{w.bits(0)});
+            for i in 0..filters.len() {
 
-        can_reg.fa1r.modify(|_,w|w.fact0().set_bit());
+                can_reg.fa1r.modify(|r, w| unsafe{w.bits(update_reg_by_bit_pos(r.bits(), i as u32, (filters[i].enable as u32) & 0xFFFFFFFE))});
 
-        can_reg.fmr.modify(|_,w|w.finit().clear_bit());
+                match filters[i].scale_config {
+                  FilterScaleConfiguration::_16BitDualConfig => can_reg.fs1r.modify(|r, w| unsafe{w.bits(update_reg_by_bit_pos(r.bits(), i as u32, 0x00))}),
+                  FilterScaleConfiguration::_32BitSingleConfig => can_reg.fs1r.modify(|r, w| unsafe{w.bits(update_reg_by_bit_pos(r.bits(), i as u32, 0x01))})
+                }
+
+                //can_reg.fm1r.modify(|_, w| w.fbm0().set_bit());
+                match filters[i].mode{
+                    FilterMode::MaskMode => can_reg.fm1r.modify(|r, w| unsafe{w.bits(update_reg_by_bit_pos(r.bits(), i as u32, 0x00))}),
+                    FilterMode::ListMode => can_reg.fm1r.modify(|r, w| unsafe{w.bits(update_reg_by_bit_pos(r.bits(), i as u32, 0x01))})
+                }
+
+                let mut id_or_mask: u32 = 0;
+
+                match filters[i].id_type{
+                    IdType::Standard => id_or_mask = (filters[i].id_or_mask << 3) | (0x00 << 2) | ((filters[i].rtr as u32) << 1),
+                    IdType::Extended => id_or_mask = (filters[i].id_or_mask << 3) | (0x01 << 2) | ((filters[i].rtr as u32) << 1)
+                }
+
+                can_reg.fb[i].fr1.modify(|_, w| unsafe { w.bits(id_or_mask)});
+                can_reg.fb[i].fr2.modify(|_, w| unsafe { w.bits(id_or_mask)});
+
+                can_reg.fa1r.modify(|r, w| unsafe{w.bits(update_reg_by_bit_pos(r.bits(), i as u32, (filters[i].enable as u32)))});
+
+            }
+
+            can_reg.fmr.modify(|_, w| w.finit().clear_bit());
+        }
 
 
         ////////////////////////////////////////
@@ -159,7 +198,6 @@ impl Can{
             tx_pin,
             rx_pin,
             can_reg,
-            can_params,
             available_tx_mailbox:[true, true, true],
             receive_flag: false
         }
@@ -247,7 +285,7 @@ impl Can{
                 let mut rx_id: u32 = 0;
                 match self.can_reg.rx[i].rir.read().ide().bits()
                 {
-                    true => {rx_id = self.can_reg.rx[i].rir.read().exid().bits();},
+                    true => {rx_id = self.can_reg.rx[i].rir.read().bits() >> 3;},
                     false => {rx_id = self.can_reg.rx[i].rir.read().stid().bits() as u32;}
                 }
                 let rx_dlc = self.can_reg.rx[i].rdtr.read().dlc().bits();

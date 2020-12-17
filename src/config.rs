@@ -14,6 +14,7 @@ pub type MOSI_PIN = PB5<Alternate<AF0>>;
 
 pub type SPI_TYPE = Spi<SPI1, SCK_PIN, MISO_PIN, MOSI_PIN>;
 
+
 pub enum UAVCAN_PRIORITY {
     UcpExceptional = 0,
     UcpImmediate = 1,
@@ -34,4 +35,9 @@ pub fn get_uavcan_id(port: u32, node_id: u32, priority: UAVCAN_PRIORITY) -> u32{
         0
     }
 
+}
+
+pub fn update_reg_by_bit_pos(src: u32, pos: u32, val: u32) -> u32{
+    let tmp = (src >> pos) | val;
+    ((tmp << pos) + src)
 }

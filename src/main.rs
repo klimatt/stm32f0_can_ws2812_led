@@ -49,14 +49,33 @@ const APP: () = {
             automatic_busoff_management: can::AutomaticBussOffManagement::Enabled,
             auto_wake_up: can::AutomaticWakeUpMode::Enabled,
             pclk_Hz: clock.clocks.pclk(),
-            bitrate: can::BitRate::_1Mbs
+            bitrate: can::BitRate::_1Mbs,
+        };
+
+        let filter1: can::Filter = can::Filter{
+            mode: can::FilterMode::ListMode,
+            scale_config: can::FilterScaleConfiguration::_32BitSingleConfig,
+            id_or_mask: 0x12345678,
+            enable: true,
+            id_type: can::IdType::Extended,
+            rtr: false
+        };
+
+        let filter2: can::Filter = can::Filter{
+            mode: can::FilterMode::ListMode,
+            scale_config: can::FilterScaleConfiguration::_32BitSingleConfig,
+            id_or_mask: 0x11111111,
+            enable: true,
+            id_type: can::IdType::Extended,
+            rtr: false
         };
 
         let can  = can::Can::new(
             can_tx,
             can_rx,
             dp.CAN,
-            can_params
+            can_params,
+            &[filter1,filter2]
         );
 
         let sck: config::SCK_PIN = gpiob.pb3.into_alternate_af0(&cs);
@@ -96,8 +115,8 @@ const APP: () = {
         let ws2812: &mut ws2812<SPI_TYPE> = ctx.resources.ws2812;
         can.irq_state_machine(|id, data|{
             rprintln!("CAN_IRQ: id: {:x}; Data: {:?}", id, data);
-            let mut color = [RGB8::default(); 16];
-            for i in 0..16{
+            let mut color = [RGB8::default(); 2];
+            for i in 0..2{
                 color[i] = RGB8::new(data[0], data[1], data[2]);
             }
             ws2812.write(brightness(color.iter().cloned(), 100)).unwrap();
@@ -112,7 +131,7 @@ const APP: () = {
 use core::panic::PanicInfo;
 use core::sync::atomic::{self, Ordering};
 use nb::Error;
-use core::borrow::BorrowMut;
+use core::borrow::{BorrowMut, Borrow};
 use crate::config::SPI_TYPE;
 use smart_leds::colors::{CORAL, RED, AQUA};
 
