@@ -75,7 +75,7 @@ const APP: () = {
             can_rx,
             dp.CAN,
             can_params,
-            &[filter1,filter2]
+            &[filter1, filter2]
         );
 
         let sck: config::SCK_PIN = gpiob.pb3.into_alternate_af0(&cs);
@@ -115,11 +115,13 @@ const APP: () = {
         let ws2812: &mut ws2812<SPI_TYPE> = ctx.resources.ws2812;
         can.irq_state_machine(|id, data|{
             rprintln!("CAN_IRQ: id: {:x}; Data: {:?}", id, data);
-            let mut color = [RGB8::default(); 2];
-            for i in 0..2{
-                color[i] = RGB8::new(data[0], data[1], data[2]);
+            if data.len() > 3 {
+                let mut color = [RGB8::default(); 2];
+                for i in 0..2 {
+                    color[i] = RGB8::new(data[0], data[1], data[2]);
+                }
+                ws2812.write(brightness(color.iter().cloned(), 100)).unwrap();
             }
-            ws2812.write(brightness(color.iter().cloned(), 100)).unwrap();
         });
         if can.receive_flag {
             can.write_to_mailbox(can::IdType::Extended, 0x00000001, &[]);

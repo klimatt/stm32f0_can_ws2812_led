@@ -155,12 +155,9 @@ impl Can{
             }
         }
 
-        // filters need to fix\\
         if filters.len() > 0 && filters.len() < 14{
-            can_reg.fmr.modify(|_, w| w.finit().set_bit());
-
             for i in 0..filters.len() {
-
+                can_reg.fmr.modify(|_, w| w.finit().set_bit());
                 can_reg.fa1r.modify(|r, w| unsafe{w.bits(update_reg_by_bit_pos(r.bits(), i as u32, (filters[i].enable as u32) & 0xFFFFFFFE))});
 
                 match filters[i].scale_config {
@@ -168,7 +165,6 @@ impl Can{
                   FilterScaleConfiguration::_32BitSingleConfig => can_reg.fs1r.modify(|r, w| unsafe{w.bits(update_reg_by_bit_pos(r.bits(), i as u32, 0x01))})
                 }
 
-                //can_reg.fm1r.modify(|_, w| w.fbm0().set_bit());
                 match filters[i].mode{
                     FilterMode::MaskMode => can_reg.fm1r.modify(|r, w| unsafe{w.bits(update_reg_by_bit_pos(r.bits(), i as u32, 0x00))}),
                     FilterMode::ListMode => can_reg.fm1r.modify(|r, w| unsafe{w.bits(update_reg_by_bit_pos(r.bits(), i as u32, 0x01))})
@@ -188,6 +184,16 @@ impl Can{
 
             }
 
+            can_reg.fmr.modify(|_, w| w.finit().clear_bit());
+        }
+        else if filters.len() == 0{
+            can_reg.fmr.modify(|_, w| w.finit().set_bit());
+            can_reg.fa1r.modify(|_, w|w.fact0().clear_bit());
+            can_reg.fs1r.modify(|_, w| w.fsc0().clear_bit());
+            can_reg.fm1r.modify(|_, w| w.fbm0().clear_bit());
+            can_reg.fb[0].fr1.modify(|_, w| unsafe { w.bits(0x00000000)});
+            can_reg.fb[0].fr2.modify(|_, w| unsafe { w.bits(0x00000000)});
+            can_reg.fa1r.modify(|_, w|w.fact0().set_bit());
             can_reg.fmr.modify(|_, w| w.finit().clear_bit());
         }
 
