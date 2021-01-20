@@ -15,6 +15,16 @@ pub type MOSI_PIN = PB5<Alternate<AF0>>;
 pub type SPI_TYPE = Spi<SPI1, SCK_PIN, MISO_PIN, MOSI_PIN>;
 
 
+#[cfg(feature = "master")]
+pub const CAN_ID: u32 = 101;
+#[cfg(feature = "tr")]
+pub const CAN_ID: u32 = 102;
+#[cfg(feature = "bl")]
+pub const CAN_ID: u32 = 103;
+#[cfg(feature = "br")]
+pub const CAN_ID: u32 = 104;
+
+
 pub enum UAVCAN_PRIORITY {
     UcpExceptional = 0,
     UcpImmediate = 1,

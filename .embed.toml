@@ -1,5 +1,5 @@
 [default.general]
-chip = "STM32F042K6TX"
+chip = "STM32F042G6U6"
 
 [default.rtt]
 enabled = true
@@ -8,6 +8,6 @@ show_timestamps = true
 [default.probe]
 protocol = "Swd"
 #USB vendor ID
-usb_vid = "0483"
+#usb_vid = "0483"
 # USB product ID
-usb_pid = "374b"
+#usb_pid = "374b"

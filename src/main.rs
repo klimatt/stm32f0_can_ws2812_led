@@ -31,6 +31,10 @@ const APP: () = {
         let cs = unsafe {CriticalSection::new()};
         let mut rcc = dp.RCC;
 
+        rcc.apb2enr.modify(|_, w| w.syscfgen().set_bit());
+        // Use PA11/12 instead of 9/10
+        dp.SYSCFG.cfgr1.modify(|_, w| w.pa11_pa12_rmp().set_bit());
+
         rcc.apb1enr.modify(|_, w| w.canen().enabled()); // can time enb
 
         let mut clock = rcc
@@ -52,19 +56,10 @@ const APP: () = {
             bitrate: can::BitRate::_1Mbs,
         };
 
-        let filter1: can::Filter = can::Filter{
+        let filter: can::Filter = can::Filter{
             mode: can::FilterMode::ListMode,
             scale_config: can::FilterScaleConfiguration::_32BitSingleConfig,
-            id_or_mask: 0x12345678,
-            enable: true,
-            id_type: can::IdType::Extended,
-            rtr: false
-        };
-
-        let filter2: can::Filter = can::Filter{
-            mode: can::FilterMode::ListMode,
-            scale_config: can::FilterScaleConfiguration::_32BitSingleConfig,
-            id_or_mask: 0x11111111,
+            id_or_mask: config::CAN_ID,
             enable: true,
             id_type: can::IdType::Extended,
             rtr: false
@@ -75,7 +70,7 @@ const APP: () = {
             can_rx,
             dp.CAN,
             can_params,
-            &[filter1, filter2]
+            &[filter]
         );
 
         let sck: config::SCK_PIN = gpiob.pb3.into_alternate_af0(&cs);
@@ -103,7 +98,7 @@ const APP: () = {
         let mut can = ctx.resources.can;
         loop {
             delay(6_000_000);
-            rprintln!("*************************");
+            //rprintln!("*************************");
             delay(6_000_000);
         }
 
@@ -115,7 +110,7 @@ const APP: () = {
         let ws2812: &mut ws2812<SPI_TYPE> = ctx.resources.ws2812;
         can.irq_state_machine(|id, data|{
             rprintln!("CAN_IRQ: id: {:x}; Data: {:?}", id, data);
-            if data.len() > 3 {
+            if data.len() >= 3 {
                 let mut color = [RGB8::default(); 2];
                 for i in 0..2 {
                     color[i] = RGB8::new(data[0], data[1], data[2]);
@@ -123,9 +118,9 @@ const APP: () = {
                 ws2812.write(brightness(color.iter().cloned(), 100)).unwrap();
             }
         });
-        if can.receive_flag {
+        /*if can.receive_flag {
             can.write_to_mailbox(can::IdType::Extended, 0x00000001, &[]);
-        }
+        }*/
     }
 };
 
